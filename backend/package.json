@@ -1,0 +1,19 @@
+{
+  "name": "ksar-el-boukhari-backend",
+  "version": "1.0.0",
+  "description": "Backend du SaaS Ksar El Boukhari",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
