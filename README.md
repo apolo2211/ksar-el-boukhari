@@ -10,3 +10,4 @@ Solution SaaS pour la gestion CRM, automatisation marketing et facturation des P
 cd backend
 npm install
 npm run dev
+# ksar-el-boukhari
