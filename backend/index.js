@@ -2,29 +2,14 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 10000;
 
-// CORS (local + prod)
-app.use(cors({
-  origin: '*'
-}));
+app.use(cors());
 
-app.use(express.json());
-
-// Route racine
-app.get('/', (req, res) => {
-  res.send('Bienvenue sur Ksar El Boukhari SaaS Backend!');
-});
-
-// ✅ ROUTE API STATUS (MANQUANTE AVANT)
 app.get('/api/status', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'Backend opérationnel 🚀'
-  });
+  res.json({ message: 'Backend Express fonctionne !' });
 });
 
-// Lancement serveur
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur backend démarré sur le port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
 });
