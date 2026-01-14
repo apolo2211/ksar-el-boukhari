@@ -1,29 +1,79 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from 'react';
+
+const API = window.location.origin;
 
 function App() {
-  const [status, setStatus] = useState("Chargement...");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [user, setUser] = useState(null);
 
-  // Détecte si on est en dev (localhost) ou prod (Render)
-  const getBackendURL = () => {
-    if (window.location.hostname === "localhost") {
-      return "http://localhost:10000/api/status"; // dev
+  const register = async () => {
+    const res = await fetch(`${API}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    setMessage(data.message);
+  };
+
+  const login = async () => {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+      loadProfile();
+    } else {
+      setMessage(data.message);
     }
-    return "https://ksar-el-boukhari.onrender.com/api/status"; // prod
+  };
+
+  const loadProfile = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const res = await fetch(`${API}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    setUser(data);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
   };
 
   useEffect(() => {
-    fetch(getBackendURL())
-      .then((res) => res.json())
-      .then((data) => setStatus(data.message))
-      .catch(() => setStatus("Backend non accessible"));
+    loadProfile();
   }, []);
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif", padding: "2rem" }}>
+    <div style={{ padding: 20 }}>
       <h1>Ksar El Boukhari SaaS</h1>
-      <h2>Bienvenue sur Ksar El Boukhari!</h2>
-      <p>Statut du backend :</p>
-      <strong>{status}</strong>
+
+      {user ? (
+        <>
+          <p>Connecté : {user.email}</p>
+          <button onClick={logout}>Déconnexion</button>
+        </>
+      ) : (
+        <>
+          <input placeholder="Email" onChange={e => setEmail(e.target.value)} />
+          <br />
+          <input type="password" placeholder="Mot de passe" onChange={e => setPassword(e.target.value)} />
+          <br />
+          <button onClick={register}>Créer compte</button>
+          <button onClick={login}>Connexion</button>
+          <p>{message}</p>
+        </>
+      )}
     </div>
   );
 }
