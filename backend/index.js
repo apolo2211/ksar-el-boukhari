@@ -5,104 +5,101 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
-// CHEMINS CORRIGÉS SELON VOTRE LISTING :
+// Importation de la base de données et des modèles
 const { sequelize } = require('./config/database'); 
 const User = require('./models/User');
 
 const app = express();
-// ... la suite de votre code app.post, app.get, etc.
 const PORT = process.env.PORT || 10000;
-const SECRET = process.env.JWT_SECRET; // Utilise la clé du .env
+const SECRET = process.env.JWT_SECRET || 'ksar_secret_default_2025';
 
 // --- Middlewares ---
 app.use(cors());
 app.use(express.json());
 
-// Servir les fichiers statiques du frontend (si le dossier build existe)
+// Servir les fichiers statiques du frontend (dossier build)
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
 /* ------------------------------
-    🔹 REGISTER (Inscription)
+    🔹 AUTH : REGISTER
 ------------------------------- */
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email et mot de passe requis' });
-    }
+    if (!email || !password) return res.status(400).json({ message: 'Champs manquants' });
 
     const exists = await User.findOne({ where: { email } });
-    if (exists) {
-      return res.status(400).json({ message: 'Cet utilisateur existe déjà' });
-    }
+    if (exists) return res.status(400).json({ message: 'L\'utilisateur existe déjà' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Création de l'utilisateur (on s'assure que le modèle User est bien défini)
-    await User.create({ 
-      email, 
-      password: hashedPassword, 
-      role: 'user' 
-    });
+    await User.create({ email, password: hashedPassword, role: 'user' });
 
     res.status(201).json({ message: 'Compte créé avec succès' });
   } catch (error) {
-    console.error('Erreur REGISTER:', error);
-    res.status(500).json({ message: 'Erreur lors de l\'inscription' });
+    console.error(error);
+    res.status(500).json({ message: 'Erreur serveur lors de l\'inscription' });
   }
 });
 
 /* ------------------------------
-    🔹 LOGIN (Connexion)
+    🔹 AUTH : LOGIN
 ------------------------------- */
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const user = await User.findOne({ where: { email } });
-    if (!user) {
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Identifiants incorrects' });
     }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ message: 'Identifiants incorrects' });
-    }
-
-    // Génération du token avec les infos du .env
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
-    res.json({ 
-        message: 'Connexion réussie',
-        token, 
-        user: { email: user.email, role: user.role } 
-    });
+    res.json({ token, user: { email: user.email, role: user.role } });
   } catch (error) {
-    console.error('Erreur LOGIN:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
+    res.status(500).json({ message: 'Erreur lors de la connexion' });
   }
 });
 
 /* ------------------------------
-    🔹 PROFIL (Vérification Token)
+    🔹 AUTH : ME (Profil)
 ------------------------------- */
 app.get('/api/auth/me', (req, res) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Non autorisé' });
-  }
+  if (!authHeader) return res.status(401).json({ message: 'Non autorisé' });
 
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, SECRET);
     res.json(decoded);
   } catch (error) {
-    res.status(403).json({ message: 'Token invalide ou expiré' });
+    res.status(403).json({ message: 'Session expirée' });
+  }
+});
+
+/* ------------------------------
+    🔹 ADMIN : STATS (Pour votre Dashboard)
+------------------------------- */
+app.get('/api/admin/stats', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.sendStatus(401);
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Accès réservé aux admins' });
+
+    // Compter les utilisateurs en base
+    const userCount = await User.count({ where: { role: 'user' } });
+    const adminCount = await User.count({ where: { role: 'admin' } });
+
+    res.json({ users: userCount, admins: adminCount });
+  } catch (error) {
+    res.sendStatus(403);
   }
 });
 
@@ -110,39 +107,22 @@ app.get('/api/auth/me', (req, res) => {
     🔹 STATUS
 ------------------------------- */
 app.get('/api/status', (req, res) => {
-  res.json({ 
-      status: '✅ Online', 
-      db: 'SQLite Connected',
-      time: new Date()
-  });
+  res.json({ message: 'Backend Express fonctionne !' });
 });
 
 /* ------------------------------
-    🔹 FRONTEND (Fallback)
+    🔹 FRONTEND : CATCH-ALL
 ------------------------------- */
+// Cette route doit rester en DERNIER
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
 });
 
 /* ------------------------------
-    🔹 LANCEMENT
-------------------------------- */
-// .sync() assure que la table User est créée dans database.sqlite
-sequelize.sync({ force: false }).then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Serveur ksar-el-boukhari lancé sur le port ${PORT}`);
-  });
-}).catch(err => {
-  console.error('❌ Erreur critique base de données :', err);
-});
-/* ------------------------------
-    🔹 SERVER START
+    🔹 LANCEMENT DU SERVEUR
 ------------------------------- */
 sequelize.sync({ force: false }).then(() => {
   app.listen(PORT, () => {
-    console.log(`✅ Base de données connectée`);
-    console.log(`🚀 Serveur démarré sur : http://localhost:${PORT}`);
+    console.log(`🚀 Serveur actif sur le port ${PORT}`);
   });
-}).catch(err => {
-  console.error('❌ Erreur de connexion à la base de données :', err);
-});
+}).catch(err => console.error('Erreur DB:', err));
