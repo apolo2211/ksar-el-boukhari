@@ -4,31 +4,29 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const fs = require('fs'); // ✅ Nécessaire pour créer le dossier du disque
+const fs = require('fs');
 
-// Initialisation de Stripe avec la clé d'environnement
+// Initialisation de Stripe
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 
-// --- CONFIGURATION DE LA BASE DE DONNÉES ---
-const dbPath = process.env.DATABASE_URL || './database.sqlite';
+// --- GESTION SIMPLIFIÉE DE LA BASE DE DONNÉES ---
+// Si DATABASE_URL est présent (Disk Render), on l'utilise. Sinon, on utilise le dossier local.
+const dbPath = process.env.DATABASE_URL || path.join(__dirname, 'database.sqlite');
 
-// ✅ Correction pour l'erreur SQLITE_CANTOPEN : crée le dossier si nécessaire
-if (dbPath.includes('/var/lib/data')) {
-    const dir = '/var/lib/data';
-    if (!fs.existsSync(dir)){
-        fs.mkdirSync(dir, { recursive: true });
-        console.log("📁 Dossier de base de données créé sur le disque Render");
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error("❌ Erreur SQLite :", err.message);
+    } else {
+        console.log("✅ Base de données connectée à :", dbPath);
     }
-}
-
-const db = new sqlite3.Database(dbPath);
+});
 
 app.use(cors());
 app.use(express.json());
 
-// Servir les fichiers statiques du Frontend (React)
+// Servir le Frontend
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
 const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
@@ -40,7 +38,6 @@ db.serialize(() => {
 
 // --- ROUTES AUTHENTIFICATION ---
 
-// Inscription
 app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -53,7 +50,6 @@ app.post('/api/auth/register', async (req, res) => {
   } catch (e) { res.status(500).json({ message: "Erreur serveur" }); }
 });
 
-// Connexion
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
@@ -66,7 +62,6 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// Profil (Récupérer les infos de l'utilisateur connecté)
 app.get('/api/auth/me', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: "Non autorisé" });
@@ -81,7 +76,7 @@ app.get('/api/auth/me', (req, res) => {
 // --- ROUTE PAIEMENT STRIPE ---
 app.post('/api/checkout', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).send();
+  if (!token || !stripe) return res.status(401).send();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -90,7 +85,7 @@ app.post('/api/checkout', async (req, res) => {
         price_data: {
           currency: 'eur',
           product_data: { name: 'Accès Premium Ksar El Boukhari' },
-          unit_amount: 2000, // 20.00€
+          unit_amount: 2000, 
         },
         quantity: 1,
       }],
@@ -104,14 +99,12 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-// Stats Admin (Visible seulement par l'admin)
 app.get('/api/admin/stats', (req, res) => {
   db.get("SELECT (SELECT COUNT(*) FROM users) as users, (SELECT COUNT(*) FROM users WHERE role='admin') as admins", (err, row) => {
-    res.json(row);
+    res.json(row || { users: 0, admins: 0 });
   });
 });
 
-// Redirection vers React pour toutes les autres routes (Frontend)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 });
