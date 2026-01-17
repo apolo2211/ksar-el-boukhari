@@ -1,128 +1,91 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-
-// Importation de la base de données et des modèles
-const { sequelize } = require('./config/database'); 
-const User = require('./models/User');
+const bcrypt = require('bcryptjs');
+const sqlite3 = require('sqlite3').verbose();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
-const SECRET = process.env.JWT_SECRET || 'ksar_secret_default_2025';
+const db = new sqlite3.Database(process.env.DATABASE_URL || './database.sqlite');
 
-// --- Middlewares ---
 app.use(cors());
 app.use(express.json());
-
-// Servir les fichiers statiques du frontend (dossier build)
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-/* ------------------------------
-    🔹 AUTH : REGISTER
-------------------------------- */
+const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
+
+// Création des tables
+db.serialize(() => {
+  db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT, role TEXT, isPremium INTEGER DEFAULT 0)");
+});
+
+// --- ROUTES AUTH ---
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Champs manquants' });
-
-    const exists = await User.findOne({ where: { email } });
-    if (exists) return res.status(400).json({ message: 'L\'utilisateur existe déjà' });
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await User.create({ email, password: hashedPassword, role: 'user' });
-
-    res.status(201).json({ message: 'Compte créé avec succès' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erreur serveur lors de l\'inscription' });
-  }
-});
-
-/* ------------------------------
-    🔹 AUTH : LOGIN
-------------------------------- */
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ where: { email } });
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'Identifiants incorrects' });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({ token, user: { email: user.email, role: user.role } });
-  } catch (error) {
-    res.status(500).json({ message: 'Erreur lors de la connexion' });
-  }
-});
-
-/* ------------------------------
-    🔹 AUTH : ME (Profil)
-------------------------------- */
-app.get('/api/auth/me', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ message: 'Non autorisé' });
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, SECRET);
-    res.json(decoded);
-  } catch (error) {
-    res.status(403).json({ message: 'Session expirée' });
-  }
-});
-
-/* ------------------------------
-    🔹 ADMIN : STATS (Pour votre Dashboard)
-------------------------------- */
-app.get('/api/admin/stats', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.sendStatus(401);
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, SECRET);
-    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Accès réservé aux admins' });
-
-    // Compter les utilisateurs en base
-    const userCount = await User.count({ where: { role: 'user' } });
-    const adminCount = await User.count({ where: { role: 'admin' } });
-
-    res.json({ users: userCount, admins: adminCount });
-  } catch (error) {
-    res.sendStatus(403);
-  }
-});
-
-/* ------------------------------
-    🔹 STATUS
-------------------------------- */
-app.get('/api/status', (req, res) => {
-  res.json({ message: 'Backend Express fonctionne !' });
-});
-
-/* ------------------------------
-    🔹 FRONTEND : CATCH-ALL
-------------------------------- */
-// Cette route doit rester en DERNIER
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
-});
-
-/* ------------------------------
-    🔹 LANCEMENT DU SERVEUR
-------------------------------- */
-sequelize.sync({ force: false }).then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Serveur actif sur le port ${PORT}`);
+  const { email, password } = req.body;
+  const hash = await bcrypt.hash(password, 10);
+  db.run("INSERT INTO users (email, password, role) VALUES (?, ?, 'user')", [email, hash], function(err) {
+    if (err) return res.status(400).json({ message: "Email déjà utilisé" });
+    const token = jwt.sign({ id: this.lastID, role: 'user' }, SECRET);
+    res.json({ token });
   });
-}).catch(err => console.error('Erreur DB:', err));
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+  db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
+    if (user && await bcrypt.compare(password, user.password)) {
+      const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
+      res.json({ token });
+    } else {
+      res.status(400).json({ message: "Identifiants incorrects" });
+    }
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ message: "Non connecté" });
+  jwt.verify(token, SECRET, (err, decoded) => {
+    if (err) return res.status(401).json({ message: "Session expirée" });
+    db.get("SELECT id, email, role, isPremium FROM users WHERE id = ?", [decoded.id], (err, user) => {
+      res.json(user);
+    });
+  });
+});
+
+// --- ROUTE PAIEMENT STRIPE ---
+app.post('/api/checkout', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).send();
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [{
+      price_data: {
+        currency: 'eur',
+        product_data: { name: 'Accès Premium Ksar El Boukhari' },
+        unit_amount: 2000, // 20.00€
+      },
+      quantity: 1,
+    }],
+    mode: 'payment',
+    success_url: `${process.env.FRONTEND_URL}/?payment=success`,
+    cancel_url: `${process.env.FRONTEND_URL}/?payment=cancel`,
+  });
+  res.json({ url: session.url });
+});
+
+// Stats Admin
+app.get('/api/admin/stats', (req, res) => {
+  db.get("SELECT COUNT(*) as users, (SELECT COUNT(*) FROM users WHERE role='admin') as admins FROM users", (err, row) => {
+    res.json(row);
+  });
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+});
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🚀 Serveur prêt sur le port ${PORT}`));
