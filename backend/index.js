@@ -4,12 +4,26 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs'); // ✅ Nécessaire pour créer le dossier du disque
 
-// On initialise Stripe avec la clé qui sera dans Render
+// Initialisation de Stripe avec la clé d'environnement
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
-const db = new sqlite3.Database(process.env.DATABASE_URL || './database.sqlite');
+
+// --- CONFIGURATION DE LA BASE DE DONNÉES ---
+const dbPath = process.env.DATABASE_URL || './database.sqlite';
+
+// ✅ Correction pour l'erreur SQLITE_CANTOPEN : crée le dossier si nécessaire
+if (dbPath.includes('/var/lib/data')) {
+    const dir = '/var/lib/data';
+    if (!fs.existsSync(dir)){
+        fs.mkdirSync(dir, { recursive: true });
+        console.log("📁 Dossier de base de données créé sur le disque Render");
+    }
+}
+
+const db = new sqlite3.Database(dbPath);
 
 app.use(cors());
 app.use(express.json());
@@ -19,7 +33,7 @@ app.use(express.static(path.join(__dirname, '../frontend/build')));
 
 const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
 
-// Initialisation de la base de données
+// Initialisation des tables
 db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT, role TEXT, isPremium INTEGER DEFAULT 0)");
 });
@@ -52,7 +66,7 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// Profil
+// Profil (Récupérer les infos de l'utilisateur connecté)
 app.get('/api/auth/me', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: "Non autorisé" });
@@ -90,14 +104,14 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-// Stats Admin
+// Stats Admin (Visible seulement par l'admin)
 app.get('/api/admin/stats', (req, res) => {
   db.get("SELECT (SELECT COUNT(*) FROM users) as users, (SELECT COUNT(*) FROM users WHERE role='admin') as admins", (err, row) => {
     res.json(row);
   });
 });
 
-// Redirection vers React pour toutes les autres routes
+// Redirection vers React pour toutes les autres routes (Frontend)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 });
