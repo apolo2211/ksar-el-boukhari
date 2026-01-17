@@ -5,10 +5,7 @@ const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const app = express();
-
-// Utilise le disque Render si présent, sinon un fichier local
 const dbPath = process.env.DATABASE_URL || path.join(__dirname, 'database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
@@ -56,25 +53,16 @@ app.get('/api/auth/me', (req, res) => {
   });
 });
 
-app.post('/api/checkout', async (req, res) => {
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: { currency: 'eur', product_data: { name: 'SaaS Premium' }, unit_amount: 2000 },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: `${req.headers.origin}/?payment=success`,
-      cancel_url: `${req.headers.origin}/?payment=cancel`,
+// ✅ NOUVELLE ROUTE : Active le premium après paiement PayPal
+app.post('/api/auth/make-premium', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).send();
+  jwt.verify(token, SECRET, (err, decoded) => {
+    if (err) return res.status(401).send();
+    db.run("UPDATE users SET isPremium = 1 WHERE id = ?", [decoded.id], (err) => {
+      if (err) return res.status(500).send();
+      res.json({ success: true });
     });
-    res.json({ url: session.url });
-  } catch (e) { res.status(500).json({ message: e.message }); }
-});
-
-app.get('/api/admin/stats', (req, res) => {
-  db.get("SELECT (SELECT COUNT(*) FROM users) as users, (SELECT COUNT(*) FROM users WHERE role='admin') as admins", (err, row) => {
-    res.json(row || { users: 0, admins: 0 });
   });
 });
 
