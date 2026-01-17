@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-// ✅ Détection automatique de l'URL du backend
+// ✅ Détecte si on est en local ou sur Render
 const API = window.location.origin.includes('localhost') 
   ? 'http://localhost:10000' 
   : window.location.origin;
@@ -13,38 +13,35 @@ function App() {
   const [msg, setMsg] = useState('');
 
   const login = async () => {
-    setMsg('Connexion en cours...');
+    setMsg('Connexion...');
     try {
-      // ✅ Correction de la route : /api/auth/login
+      // ✅ Correction de la route vers /api/auth/login
       const res = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      
       if (data.token) {
         localStorage.setItem('token', data.token);
-        setMsg('');
         loadProfile();
       } else {
         setMsg(data.message || 'Identifiants incorrects');
       }
     } catch (err) {
-      setMsg('Erreur : Impossible de joindre le serveur');
+      setMsg('Erreur : Le serveur ne répond pas');
     }
   };
 
   const loadProfile = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
-
     try {
       const res = await fetch(`${API}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setUser(data);
         if (data.role === 'admin') loadStats(token);
       }
@@ -67,18 +64,14 @@ function App() {
     setStats(null);
   };
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  useEffect(() => { loadProfile(); }, []);
 
   if (!user) {
     return (
       <div style={{ padding: 30 }}>
         <h1>Ksar El Boukhari SaaS</h1>
-        <input placeholder="Email" onChange={e => setEmail(e.target.value)} />
-        <br /><br />
-        <input type="password" placeholder="Mot de passe" onChange={e => setPassword(e.target.value)} />
-        <br /><br />
+        <input placeholder="Email" onChange={e => setEmail(e.target.value)} /><br /><br />
+        <input type="password" placeholder="Mot de passe" onChange={e => setPassword(e.target.value)} /><br /><br />
         <button onClick={login}>Connexion</button>
         <p style={{ color: 'red' }}>{msg}</p>
       </div>
@@ -88,15 +81,12 @@ function App() {
   return (
     <div style={{ padding: 30 }}>
       <h1>Dashboard {user.role === 'admin' ? 'Admin' : 'Utilisateur'}</h1>
-      <p>Bienvenue : <strong>{user.email}</strong></p>
+      <p>Connecté en tant que : <strong>{user.email}</strong></p>
       {user.role === 'admin' && stats && (
-        <div style={{ background: '#f0f0f0', padding: 15, borderRadius: 8 }}>
-          <h2>Statistiques</h2>
-          <p>Utilisateurs : {stats.users}</p>
-          <p>Admins : {stats.admins}</p>
+        <div style={{ background: '#eee', padding: 10 }}>
+          <p>Utilisateurs : {stats.users} | Admins : {stats.admins}</p>
         </div>
       )}
-      <br />
       <button onClick={logout}>Déconnexion</button>
     </div>
   );
