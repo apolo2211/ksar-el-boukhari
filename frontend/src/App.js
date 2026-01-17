@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:10000';
+// ✅ Détection automatique de l'URL du backend
+const API = window.location.origin.includes('localhost') 
+  ? 'http://localhost:10000' 
+  : window.location.origin;
 
 function App() {
   const [email, setEmail] = useState('');
@@ -10,21 +13,25 @@ function App() {
   const [msg, setMsg] = useState('');
 
   const login = async () => {
+    setMsg('Connexion en cours...');
     try {
-      const res = await fetch(`${API}/api/login`, {
+      // ✅ Correction de la route : /api/auth/login
+      const res = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
+      
       if (data.token) {
         localStorage.setItem('token', data.token);
+        setMsg('');
         loadProfile();
       } else {
-        setMsg(data.message);
+        setMsg(data.message || 'Identifiants incorrects');
       }
     } catch (err) {
-      setMsg('Erreur serveur : impossible de se connecter');
+      setMsg('Erreur : Impossible de joindre le serveur');
     }
   };
 
@@ -32,21 +39,26 @@ function App() {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const res = await fetch(`${API}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setUser(data);
-
-    if (data.role === 'admin') loadStats(token);
+    try {
+      const res = await fetch(`${API}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        if (data.role === 'admin') loadStats(token);
+      }
+    } catch (err) { console.error(err); }
   };
 
   const loadStats = async (token) => {
-    const res = await fetch(`${API}/api/admin/stats`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setStats(data);
+    try {
+      const res = await fetch(`${API}/api/admin/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setStats(data);
+    } catch (err) { console.error(err); }
   };
 
   const logout = () => {
@@ -64,11 +76,11 @@ function App() {
       <div style={{ padding: 30 }}>
         <h1>Ksar El Boukhari SaaS</h1>
         <input placeholder="Email" onChange={e => setEmail(e.target.value)} />
-        <br />
+        <br /><br />
         <input type="password" placeholder="Mot de passe" onChange={e => setPassword(e.target.value)} />
-        <br />
+        <br /><br />
         <button onClick={login}>Connexion</button>
-        <p>{msg}</p>
+        <p style={{ color: 'red' }}>{msg}</p>
       </div>
     );
   }
@@ -76,16 +88,15 @@ function App() {
   return (
     <div style={{ padding: 30 }}>
       <h1>Dashboard {user.role === 'admin' ? 'Admin' : 'Utilisateur'}</h1>
-      <p>{user.email}</p>
-
+      <p>Bienvenue : <strong>{user.email}</strong></p>
       {user.role === 'admin' && stats && (
-        <div>
+        <div style={{ background: '#f0f0f0', padding: 15, borderRadius: 8 }}>
           <h2>Statistiques</h2>
           <p>Utilisateurs : {stats.users}</p>
           <p>Admins : {stats.admins}</p>
         </div>
       )}
-
+      <br />
       <button onClick={logout}>Déconnexion</button>
     </div>
   );
