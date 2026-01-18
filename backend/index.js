@@ -19,7 +19,6 @@ db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT, role TEXT, isPremium INTEGER DEFAULT 0)");
 });
 
-// --- ROUTES ---
 app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -48,12 +47,12 @@ app.get('/api/auth/me', (req, res) => {
   jwt.verify(token, SECRET, (err, decoded) => {
     if (err) return res.status(401).send();
     db.get("SELECT id, email, role, isPremium FROM users WHERE id = ?", [decoded.id], (err, user) => {
+      if (!user) return res.status(404).send();
       res.json(user);
     });
   });
 });
 
-// ✅ NOUVELLE ROUTE : Active le premium après paiement PayPal
 app.post('/api/auth/make-premium', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).send();
