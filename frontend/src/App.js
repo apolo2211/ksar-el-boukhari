@@ -14,7 +14,7 @@ function App() {
   // 1. Charger le script PayPal et vérifier si l'utilisateur est déjà connecté
   useEffect(() => {
     const script = document.createElement("script");
-    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=EUR`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=EUR&buyer-country=FR`;
     script.async = true;
     document.body.appendChild(script);
     loadProfile();
