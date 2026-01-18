@@ -120,6 +120,24 @@ function App() {
         <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={{ marginTop: 40, border: 'none', background: '#eee', padding: '10px 20px', borderRadius: 5, cursor: 'pointer' }}>
           Se déconnecter
         </button>
+
+        {/* BOUTON DE SECOURS POUR FORCER LE PREMIUM */}
+        <div style={{ marginTop: 20 }}>
+          <button 
+            onClick={async () => {
+              const token = localStorage.getItem('token');
+              await fetch(`${API}/api/auth/make-premium`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              alert("Succès ! Activation du diamant...");
+              window.location.reload();
+            }} 
+            style={{ background: 'none', border: 'none', color: '#ddd', cursor: 'pointer', fontSize: '10px' }}
+          >
+            (Simuler succès paiement)
+          </button>
+        </div>
       </div>
     </div>
   );
