@@ -17,29 +17,28 @@ function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const res = await fetch(`${API}/api/auth/me`, { 
-            headers: { Authorization: `Bearer ${token}` } 
+          const res = await fetch(API + '/api/auth/me', {
+            headers: { Authorization: 'Bearer ' + token }
           });
           if (res.ok) {
-            const data = await res.json();
-            setUser(data);
+            setUser(await res.json());
           } else {
             localStorage.removeItem('token');
           }
-        } catch (e) { console.error("Erreur profil"); }
+        } catch (e) { console.error("Session error"); }
       }
       setLoading(false);
     };
     loadProfile();
   }, []);
 
-  // 2. Gestion Connexion/Inscription
+  // 2. Connexion / Inscription
   const handleAuth = async (e) => {
     e.preventDefault();
     setMsg("Chargement...");
     const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
     try {
-      const res = await fetch(`${API}${endpoint}`, {
+      const res = await fetch(API + endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -47,20 +46,18 @@ function App() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
-        window.location.reload();
+        window.location.reload(); // Recharge pour activer PayPal
       } else {
         setMsg(data.message || "Erreur");
       }
-    } catch (err) {
-      setMsg("Le serveur ne répond pas.");
-    }
+    } catch (err) { setMsg("Serveur injoignable"); }
   };
 
-  // 3. Chargement PayPal SEULEMENT si l'utilisateur est connecté et non-premium
+  // 3. PayPal
   useEffect(() => {
     if (user && !user.isPremium) {
       const script = document.createElement("script");
-      script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD`;
+      script.src = "https://www.paypal.com/sdk/js?client-id=" + PAYPAL_CLIENT_ID + "&currency=USD";
       script.async = true;
       script.onload = () => {
         if (window.paypal) {
@@ -70,9 +67,9 @@ function App() {
             }),
             onApprove: async (data, actions) => {
               await actions.order.capture();
-              await fetch(`${API}/api/auth/make-premium`, {
+              await fetch(API + '/api/auth/make-premium', {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
               });
               window.location.reload();
             }
@@ -83,40 +80,39 @@ function App() {
     }
   }, [user]);
 
-  if (loading) return <div style={{padding:50, textAlign:'center'}}>Vérification de la session...</div>;
+  if (loading) return <div style={{textAlign:'center', padding:50}}>Chargement...</div>;
 
   if (!user) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' }}>
         <h2>Ksar El Boukhari</h2>
-        <form onSubmit={handleAuth} style={{ display: 'inline-block', padding: '20px', border: '1px solid #ccc' }}>
-          <input type="email" placeholder="Email" style={{display:'block', marginBottom:10}} onChange={e=>setEmail(e.target.value)} required />
-          <input type="password" placeholder="Mot de passe" style={{display:'block', marginBottom:10}} onChange={e=>setPassword(e.target.value)} required />
-          <button type="submit" style={{width:'100%', background:'#0070ba', color:'#fff', border:'none', padding:10}}>
-            {isRegistering ? "Créer mon compte" : "Me connecter"}
+        <div style={{ display: 'inline-block', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
+          <form onSubmit={handleAuth}>
+            <input type="email" placeholder="Email" style={{display:'block', marginBottom:10, padding:8, width:250}} onChange={e=>setEmail(e.target.value)} required />
+            <input type="password" placeholder="Mot de passe" style={{display:'block', marginBottom:10, padding:8, width:250}} onChange={e=>setPassword(e.target.value)} required />
+            <button type="submit" style={{width:'100%', background:'#0070ba', color:'#fff', border:'none', padding:10, cursor:'pointer'}}>
+              {isRegistering ? "S'inscrire" : "Se connecter"}
+            </button>
+          </form>
+          <p style={{color:'red'}}>{msg}</p>
+          <button onClick={() => setIsRegistering(!isRegistering)} style={{background:'none', border:'none', color:'blue', cursor:'pointer', marginTop:10}}>
+            {isRegistering ? "Créer un compte" : "Déjà inscrit ?"}
           </button>
-        </form>
-        <p style={{color:'red'}}>{msg}</p>
-        <button onClick={() => setIsRegistering(!isRegistering)} style={{background:'none', border:'none', color:'blue', cursor:'pointer'}}>
-          {isRegistering ? "Déjà inscrit ? Connexion" : "Pas de compte ? S'inscrire"}
-        </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'sans-serif' }}>
-      <h1>Espace Membre</h1>
-      <p>Bienvenue : <b>{user.email}</b></p>
-      <p>Statut : <b>{user.isPremium ? "💎 PREMIUM" : "GRATUIT"}</b></p>
-      
+      <h1>Bienvenue, {user.email}</h1>
+      <p>Statut : <b>{user.isPremium ? "🌟 PREMIUM" : "GRATUIT"}</b></p>
       {!user.isPremium && (
-        <div style={{marginTop:30}}>
-          <h3>Passer au Premium (20$)</h3>
-          <div id="paypal-button-container" style={{maxWidth:'300px', margin:'0 auto'}}></div>
+        <div style={{ marginTop: 30 }}>
+          <h3>Devenir Premium (20$)</h3>
+          <div id="paypal-button-container" style={{ maxWidth: '300px', margin: '0 auto' }}></div>
         </div>
       )}
-
       <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={{marginTop:50}}>Déconnexion</button>
     </div>
   );
