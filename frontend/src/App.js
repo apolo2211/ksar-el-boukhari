@@ -11,7 +11,6 @@ function App() {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 1. Chargement du profil
   useEffect(() => {
     const loadProfile = async () => {
       const token = localStorage.getItem('token');
@@ -20,11 +19,8 @@ function App() {
           const res = await fetch(API + '/api/auth/me', {
             headers: { Authorization: 'Bearer ' + token }
           });
-          if (res.ok) {
-            setUser(await res.json());
-          } else {
-            localStorage.removeItem('token');
-          }
+          if (res.ok) setUser(await res.json());
+          else localStorage.removeItem('token');
         } catch (e) { console.error("Session error"); }
       }
       setLoading(false);
@@ -32,7 +28,6 @@ function App() {
     loadProfile();
   }, []);
 
-  // 2. Connexion / Inscription
   const handleAuth = async (e) => {
     e.preventDefault();
     setMsg("Chargement...");
@@ -46,21 +41,20 @@ function App() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
-        window.location.reload(); // Recharge pour activer PayPal
+        window.location.reload();
       } else {
         setMsg(data.message || "Erreur");
       }
     } catch (err) { setMsg("Serveur injoignable"); }
   };
 
-  // 3. PayPal
   useEffect(() => {
     if (user && !user.isPremium) {
       const script = document.createElement("script");
       script.src = "https://www.paypal.com/sdk/js?client-id=" + PAYPAL_CLIENT_ID + "&currency=USD";
       script.async = true;
       script.onload = () => {
-        if (window.paypal) {
+        if (window.paypal && document.getElementById('paypal-button-container')) {
           window.paypal.Buttons({
             createOrder: (data, actions) => actions.order.create({
               purchase_units: [{ amount: { value: '20.00' } }]
@@ -80,11 +74,11 @@ function App() {
     }
   }, [user]);
 
-  if (loading) return <div style={{textAlign:'center', padding:50}}>Chargement...</div>;
+  if (loading) return <div style={{textAlign:'center', padding:50}}>Chargement du profil...</div>;
 
   if (!user) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' }}>
+      <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Arial' }}>
         <h2>Ksar El Boukhari</h2>
         <div style={{ display: 'inline-block', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
           <form onSubmit={handleAuth}>
@@ -96,7 +90,7 @@ function App() {
           </form>
           <p style={{color:'red'}}>{msg}</p>
           <button onClick={() => setIsRegistering(!isRegistering)} style={{background:'none', border:'none', color:'blue', cursor:'pointer', marginTop:10}}>
-            {isRegistering ? "Créer un compte" : "Déjà inscrit ?"}
+            {isRegistering ? "Créer un compte" : "Déjà inscrit ? Connexion"}
           </button>
         </div>
       </div>
@@ -104,12 +98,14 @@ function App() {
   }
 
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'sans-serif' }}>
+    <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'Arial' }}>
       <h1>Bienvenue, {user.email}</h1>
-      <p>Statut : <b>{user.isPremium ? "🌟 PREMIUM" : "GRATUIT"}</b></p>
+      <div style={{margin:'20px auto', padding:20, border:'1px solid #eee', width:300, borderRadius:10}}>
+         <p>Statut : <b>{user.isPremium ? "🌟 PREMIUM" : "GRATUIT"}</b></p>
+      </div>
       {!user.isPremium && (
         <div style={{ marginTop: 30 }}>
-          <h3>Devenir Premium (20$)</h3>
+          <h3>Passer au Premium (20$)</h3>
           <div id="paypal-button-container" style={{ maxWidth: '300px', margin: '0 auto' }}></div>
         </div>
       )}
