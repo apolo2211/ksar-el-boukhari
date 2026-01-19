@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 
-// On utilise une chaîne vide pour que l'API utilise le même domaine que le site
+// API vide pour utiliser le même domaine sur Render
 const API = window.location.origin.includes('localhost') ? 'http://localhost:10000' : '';
-
 const PAYPAL_CLIENT_ID = "AcpSdVE7R3G62JC-70OczqR0BGeuZHngYsP9sfv20t1o41Ht-MWWaykIHb9drrMW1FUnxjS2MCoP5JEl";
 
 function App() {
@@ -24,14 +23,19 @@ function App() {
   const loadProfile = async () => {
     const token = localStorage.getItem('token');
     if (token) {
-      const res = await fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setUser(await res.json());
+      try {
+        const res = await fetch(`${API}/api/auth/me`, { 
+          headers: { Authorization: `Bearer ${token}` } 
+        });
+        if (res.ok) setUser(await res.json());
+      } catch (e) { console.error("Session expirée"); }
     }
     setLoading(false);
   };
 
   const handleAuth = async (e) => {
     e.preventDefault();
+    setMsg("");
     const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
     try {
       const res = await fetch(`${API}${endpoint}`, {
@@ -44,29 +48,35 @@ function App() {
         localStorage.setItem('token', data.token);
         window.location.reload();
       } else {
-        setMsg(data.message);
+        setMsg(data.message || "Identifiants incorrects");
       }
     } catch (err) {
-      setMsg("Erreur de connexion au serveur.");
+      setMsg("Impossible de contacter le serveur.");
     }
   };
 
   useEffect(() => {
     if (user && !user.isPremium) {
-      const interval = setInterval(() => {
+      const timer = setInterval(() => {
         if (window.paypal) {
-          clearInterval(interval);
-          window.paypal.Buttons({
-            createOrder: (data, actions) => actions.order.create({ purchase_units: [{ amount: { value: '20.00' } }] }),
-            onApprove: async (data, actions) => {
-              await actions.order.capture();
-              await fetch(`${API}/api/auth/make-premium`, { 
-                method: 'POST', 
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
-              });
-              window.location.reload();
-            }
-          }).render('#paypal-button-container');
+          clearInterval(timer);
+          const container = document.getElementById('paypal-button-container');
+          if (container && container.innerHTML === "") {
+            window.paypal.Buttons({
+              createOrder: (data, actions) => actions.order.create({
+                purchase_units: [{ amount: { value: '20.00' } }]
+              }),
+              onApprove: async (data, actions) => {
+                await actions.order.capture();
+                await fetch(`${API}/api/auth/make-premium`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                });
+                alert("Compte Premium activé !");
+                window.location.reload();
+              }
+            }).render('#paypal-button-container');
+          }
         }
       }, 1000);
     }
@@ -76,19 +86,19 @@ function App() {
 
   if (!user) {
     return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial' }}>
-        <div style={{ padding: 30, border: '1px solid #ccc', borderRadius: 10, width: 300, textAlign: 'center' }}>
-          <h2>Ksar El Boukhari</h2>
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#f4f7f6', fontFamily: 'Arial' }}>
+        <div style={{ padding: 40, background: '#fff', borderRadius: 10, boxShadow: '0 4px 15px rgba(0,0,0,0.1)', width: 350, textAlign: 'center' }}>
+          <h2 style={{ color: '#0070ba' }}>Ksar El Boukhari</h2>
           <form onSubmit={handleAuth}>
-            <input type="email" placeholder="Email" required style={{ width: '100%', padding: 10, marginBottom: 10 }} onChange={e => setEmail(e.target.value)} />
-            <input type="password" placeholder="Mot de passe" required style={{ width: '100%', padding: 10, marginBottom: 10 }} onChange={e => setPassword(e.target.value)} />
-            <button type="submit" style={{ width: '100%', padding: 10, background: '#0070ba', color: '#fff', border: 'none', cursor: 'pointer' }}>
-              {isRegistering ? "S'inscrire" : "Se connecter"}
+            <input type="email" placeholder="Email" required style={{ width: '100%', padding: 10, margin: '10px 0', borderRadius: 5, border: '1px solid #ddd' }} onChange={e => setEmail(e.target.value)} />
+            <input type="password" placeholder="Mot de passe" required style={{ width: '100%', padding: 10, margin: '10px 0', borderRadius: 5, border: '1px solid #ddd' }} onChange={e => setPassword(e.target.value)} />
+            <button type="submit" style={{ width: '100%', padding: 12, background: '#0070ba', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 'bold' }}>
+              {isRegistering ? "Créer un compte" : "Se connecter"}
             </button>
           </form>
-          <p style={{ color: 'red' }}>{msg}</p>
-          <p onClick={() => setIsRegistering(!isRegistering)} style={{ cursor: 'pointer', color: 'blue', fontSize: '0.8em' }}>
-            {isRegistering ? "Déjà un compte ? Connexion" : "Pas de compte ? S'inscrire"}
+          {msg && <p style={{ color: 'red', fontSize: '0.9em' }}>{msg}</p>}
+          <p onClick={() => setIsRegistering(!isRegistering)} style={{ color: '#0070ba', cursor: 'pointer', marginTop: 20, fontSize: '0.85em' }}>
+            {isRegistering ? "Déjà un compte ? Connectez-vous" : "Pas encore inscrit ? Créez un compte"}
           </p>
         </div>
       </div>
@@ -96,16 +106,18 @@ function App() {
   }
 
   return (
-    <div style={{ textAlign: 'center', marginTop: 50, fontFamily: 'Arial' }}>
+    <div style={{ textAlign: 'center', marginTop: 80, fontFamily: 'Arial' }}>
       <h1>Bienvenue, {user.email}</h1>
-      <p>Statut : <strong>{user.isPremium ? "💎 PREMIUM" : "Gratuit"}</strong></p>
+      <div style={{ margin: '20px auto', padding: 20, background: '#fff', borderRadius: 10, border: '1px solid #eee', width: 320 }}>
+        <p>Statut : <strong>{user.isPremium ? "💎 MEMBRE PREMIUM" : "Utilisateur Gratuit"}</strong></p>
+      </div>
       {!user.isPremium && (
-        <div style={{ width: 300, margin: '20px auto' }}>
-          <p>Passer au Premium pour 20$</p>
-          <div id="paypal-button-container"></div>
+        <div>
+          <p>Devenez Premium pour 20$ USD</p>
+          <div id="paypal-button-container" style={{ width: 300, margin: '20px auto' }}></div>
         </div>
       )}
-      <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={{ marginTop: 20 }}>Déconnexion</button>
+      <button onClick={() => { localStorage.clear(); window.location.reload(); }} style={{ marginTop: 50, color: '#666', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Déconnexion</button>
     </div>
   );
 }

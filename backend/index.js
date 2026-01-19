@@ -8,22 +8,23 @@ const path = require('path');
 const app = express();
 const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
 
-// Connexion à la base de données
+// Base de données
 const dbPath = path.join(__dirname, 'database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
 app.use(cors());
 app.use(express.json());
 
-// ÉTAPE CLÉ : Servir les fichiers du dossier Build de React
+// SERVIR LE FRONTEND : C'est ici que la magie opère pour Render
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-// Initialisation de la table
+// Initialisation de la table utilisateurs
 db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT, role TEXT, isPremium INTEGER DEFAULT 0)");
 });
 
-// ROUTES API
+// --- ROUTES API ---
+
 app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -63,18 +64,19 @@ app.post('/api/auth/make-premium', (req, res) => {
   if (!token) return res.status(401).send();
   jwt.verify(token, SECRET, (err, decoded) => {
     if (err) return res.status(401).send();
-    db.run("UPDATE users SET isPremium = 1 WHERE id = ?", [decoded.id], () => {
+    db.run("UPDATE users SET isPremium = 1 WHERE id = ?", [decoded.id], (err) => {
+      if (err) return res.status(500).send();
       res.json({ success: true });
     });
   });
 });
 
-// ÉTAPE CLÉ : Rediriger toutes les autres requêtes vers React
+// REDIRECTION : Pour que React gère les routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
+  console.log(`Serveur actif sur le port ${PORT}`);
 });
