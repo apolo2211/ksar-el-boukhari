@@ -6,36 +6,41 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const app = express();
-const dbPath = process.env.DATABASE_URL || path.join(__dirname, 'database.sqlite');
+const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
+
+// Connexion à la base de données
+const dbPath = path.join(__dirname, 'database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
 app.use(cors());
 app.use(express.json());
+
+// ÉTAPE CLÉ : Servir les fichiers du dossier Build de React
 app.use(express.static(path.join(__dirname, '../frontend/build')));
 
-const SECRET = process.env.JWT_SECRET || 'ksar_secret_2026';
-
+// Initialisation de la table
 db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE, password TEXT, role TEXT, isPremium INTEGER DEFAULT 0)");
 });
 
+// ROUTES API
 app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
   try {
     const hash = await bcrypt.hash(password, 10);
     db.run("INSERT INTO users (email, password, role) VALUES (?, ?, 'user')", [email, hash], function(err) {
       if (err) return res.status(400).json({ message: "Email déjà utilisé" });
-      const token = jwt.sign({ id: this.lastID, role: 'user' }, SECRET);
+      const token = jwt.sign({ id: this.lastID }, SECRET);
       res.json({ token });
     });
-  } catch (e) { res.status(500).send(); }
+  } catch (e) { res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
   db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
     if (user && await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
+      const token = jwt.sign({ id: user.id }, SECRET);
       res.json({ token });
     } else { res.status(400).json({ message: "Identifiants incorrects" }); }
   });
@@ -46,7 +51,7 @@ app.get('/api/auth/me', (req, res) => {
   if (!token) return res.status(401).send();
   jwt.verify(token, SECRET, (err, decoded) => {
     if (err) return res.status(401).send();
-    db.get("SELECT id, email, role, isPremium FROM users WHERE id = ?", [decoded.id], (err, user) => {
+    db.get("SELECT id, email, isPremium FROM users WHERE id = ?", [decoded.id], (err, user) => {
       if (!user) return res.status(404).send();
       res.json(user);
     });
@@ -58,13 +63,18 @@ app.post('/api/auth/make-premium', (req, res) => {
   if (!token) return res.status(401).send();
   jwt.verify(token, SECRET, (err, decoded) => {
     if (err) return res.status(401).send();
-    db.run("UPDATE users SET isPremium = 1 WHERE id = ?", [decoded.id], (err) => {
-      if (err) return res.status(500).send();
+    db.run("UPDATE users SET isPremium = 1 WHERE id = ?", [decoded.id], () => {
       res.json({ success: true });
     });
   });
 });
 
-app.get('*', (req, res) => { res.sendFile(path.join(__dirname, '../frontend/build', 'index.html')); });
+// ÉTAPE CLÉ : Rediriger toutes les autres requêtes vers React
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+});
 
-app.listen(process.env.PORT || 10000, '0.0.0.0');
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
+});
