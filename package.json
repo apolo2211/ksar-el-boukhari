@@ -1,0 +1,18 @@
+{
+  "name": "ksar-el-boukhari",
+  "version": "1.0.0",
+  "description": "SaaS Ksar El Boukhari",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "node backend/index.js",
+    "install-all": "npm install && cd frontend && npm install",
+    "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "sqlite3": "^5.1.6"
+  }
+}
