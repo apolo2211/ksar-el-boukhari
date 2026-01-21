@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 const API = window.location.origin.includes('localhost') ? 'http://localhost:10000' : '';
-const PAYPAL_CLIENT_ID = "AcpSdVE7R3G62JC-70OczqR0BGeuZHngYsP9sfv20t1o41Ht-MWWaykIHb9drrMW1FUnxjS2MCoP5JEl";
+const PAYPAL_CLIENT_ID = "Aa7TdfCc0nu4HOafuljUOVv-KIqmzrHZNlu_K3_LdVrDW6k-W_X3-Jt9PcWj-qvXdPVGorrCDhpwj2kz";
 
 function App() {
   const [email, setEmail] = useState('');
