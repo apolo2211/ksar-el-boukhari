@@ -12,21 +12,45 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadProfile = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const res = await fetch(API + '/api/auth/me', {
-            headers: { Authorization: 'Bearer ' + token }
-          });
-          if (res.ok) setUser(await res.json());
-        } catch (e) { console.error("Session error"); }
-      }
-      setLoading(false);
-    };
-    loadProfile();
-  }, []);
-
+    if (user && !user.isPremium) {
+      // 1. On crée le script
+      const script = document.createElement("script");
+      script.src = "https://www.paypal.com/sdk/js?client-id=" + PAYPAL_CLIENT_ID + "&currency=USD";
+      script.async = true;
+      
+      script.onload = () => {
+        // 2. On attend un tout petit peu que React affiche le container
+        setTimeout(() => {
+          const container = document.getElementById('paypal-button-container');
+          if (window.paypal && container) {
+            // 3. On vide le container au cas où (évite les doubles boutons)
+            container.innerHTML = ""; 
+            window.paypal.Buttons({
+              createOrder: (data, actions) => actions.order.create({
+                purchase_units: [{ amount: { value: '20.00' } }]
+              }),
+              onApprove: async (data, actions) => {
+                await actions.order.capture();
+                await fetch(API + '/api/auth/make-premium', {
+                  method: 'POST',
+                  headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
+                });
+                window.location.reload();
+              }
+            }).render('#paypal-button-container');
+          }
+        }, 500); // Délai de 500ms pour laisser le DOM se charger
+      };
+      document.body.appendChild(script);
+      
+      // Nettoyage si on quitte la page
+      return () => {
+        if (document.body.contains(script)) {
+          document.body.removeChild(script);
+        }
+      };
+    }
+  }, [user]);
   const handleAuth = async (e) => {
     e.preventDefault();
     setMsg("Chargement...");
