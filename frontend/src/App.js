@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const API = window.location.origin.includes('localhost') ? 'http://localhost:10000' : '';
+const API = ""; 
 const PAYPAL_CLIENT_ID = "AcpSdVE7R3G62JC-70OczqR0BGeuZHngYsP9sfv20t1o41Ht-MWWaykIHb9drrMW1FUnxjS2MCoP5JEl";
 
 function App() {
@@ -11,19 +11,40 @@ function App() {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // 1. CHARGEMENT DU PROFIL (Correction du blocage "Chargement")
+  useEffect(() => {
+    const loadProfile = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const res = await fetch(API + '/api/auth/me', {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data);
+          } else {
+            localStorage.removeItem('token');
+          }
+        } catch (e) { 
+          console.error("Erreur serveur"); 
+        }
+      }
+      setLoading(false); // Arrête le chargement quoi qu'il arrive
+    };
+    loadProfile();
+  }, []);
+
+  // 2. LOGIQUE PAYPAL (Optimisée)
   useEffect(() => {
     if (user && !user.isPremium) {
-      // 1. On crée le script
       const script = document.createElement("script");
       script.src = "https://www.paypal.com/sdk/js?client-id=" + PAYPAL_CLIENT_ID + "&currency=USD";
       script.async = true;
-      
       script.onload = () => {
-        // 2. On attend un tout petit peu que React affiche le container
         setTimeout(() => {
           const container = document.getElementById('paypal-button-container');
           if (window.paypal && container) {
-            // 3. On vide le container au cas où (évite les doubles boutons)
             container.innerHTML = ""; 
             window.paypal.Buttons({
               createOrder: (data, actions) => actions.order.create({
@@ -39,18 +60,14 @@ function App() {
               }
             }).render('#paypal-button-container');
           }
-        }, 500); // Délai de 500ms pour laisser le DOM se charger
+        }, 500);
       };
       document.body.appendChild(script);
-      
-      // Nettoyage si on quitte la page
-      return () => {
-        if (document.body.contains(script)) {
-          document.body.removeChild(script);
-        }
-      };
+      return () => { if (document.body.contains(script)) document.body.removeChild(script); };
     }
   }, [user]);
+
+  // 3. CONNEXION / INSCRIPTION
   const handleAuth = async (e) => {
     e.preventDefault();
     setMsg("Chargement...");
@@ -71,33 +88,7 @@ function App() {
     } catch (err) { setMsg("Erreur réseau"); }
   };
 
-  useEffect(() => {
-    if (user && !user.isPremium) {
-      const script = document.createElement("script");
-      script.src = "https://www.paypal.com/sdk/js?client-id=" + PAYPAL_CLIENT_ID + "&currency=USD";
-      script.async = true;
-      script.onload = () => {
-        if (window.paypal) {
-          window.paypal.Buttons({
-            createOrder: (data, actions) => actions.order.create({
-              purchase_units: [{ amount: { value: '20.00' } }]
-            }),
-            onApprove: async (data, actions) => {
-              await actions.order.capture();
-              await fetch(API + '/api/auth/make-premium', {
-                method: 'POST',
-                headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
-              });
-              window.location.reload();
-            }
-          }).render('#paypal-button-container');
-        }
-      };
-      document.body.appendChild(script);
-    }
-  }, [user]);
-
-  if (loading) return <div style={{textAlign:'center', padding:50}}>Chargement...</div>;
+  if (loading) return <div style={{textAlign:'center', padding:50}}>Chargement du Ksar...</div>;
 
   if (!user) {
     return (
